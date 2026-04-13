@@ -147,17 +147,30 @@ meaningfully more useful, especially for workout or study playlists.
 
 ## 9. Personal Reflection
 
-Building this made me realize how much invisible math sits behind a "simple"
-recommendation. Every decision — which features to include, how many points to assign,
-whether to allow negative scores — directly shapes which users get good results and
-which ones get stuck in a bubble.
+My biggest learning moment was realizing that the order I assigned point values in
+actually mattered more than I expected. I gave mood the highest weight because I
+assumed it was the most personal thing about a listener — but when I removed it
+entirely from the scoring, most of my #1 results stayed the same. That was humbling.
+It told me I had been guessing at what mattered instead of testing it, and that the
+only way to really know is to run the experiment.
 
-The most surprising thing was discovering that mood, which carries the highest point
-value, was often not the deciding factor. Genre and energy were doing most of the
-heavy lifting. That made me think about how real apps like Spotify probably weight
-dozens of features and still get it wrong for niche tastes.
+The AI tools helped me move fast — I could get a working scorer, a CSV, and a set of
+profiles up and running without getting stuck on boilerplate. But I did have to
+double-check the adjacency maps. The tool filled them in based on general music
+knowledge, and some of the relationships were one-directional without flagging it.
+For example, folk listed blues as adjacent, but blues did not list folk back. I only
+caught that by reading the data carefully myself. AI gave me a strong starting point,
+but I still had to verify the logic by hand.
 
-It also changed how I think about recommender systems in general. When an app suggests
-something that feels slightly off, it is probably not random — there is a specific
-scoring rule somewhere that is rewarding the wrong thing or ignoring the right one.
-Now I look at those suggestions differently.
+What surprised me most was how "alive" the recommendations felt even though the
+algorithm is just addition. When the Chill Lofi profile returned Library Rain at
+7.47 out of 7.5, it genuinely felt like the system understood the request — even
+though all it did was add up five numbers. That gap between what the math is doing
+and what it feels like to the user is something I did not expect to notice, but now
+I think about it every time I get a playlist recommendation from a real app.
+
+If I extended this project, I would want to add a listening history component —
+something that adjusts the weights over time based on which songs the user skipped
+or replayed. Right now the system treats every user the same way on every run.
+A recommender that learns from what you actually do, not just what you say you want,
+would be a completely different and more honest kind of system.
