@@ -63,6 +63,8 @@ flowchart TD
   - Potential Biases: This system might make less important things such as valence or accoustics have no influence because of how big of a influence genre and mood have over other items.
   
 ![App screenshot](assets/screenshot.png)
+
+- Profile terminal output screenshots
 ![App screenshot](assets/Profile1.png)
 ![App screenshot](assets/Profile2.png)
 ![App screenshot](assets/Profile3.png)
