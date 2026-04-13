@@ -35,21 +35,21 @@ class Recommender:
     Required by tests/test_recommender.py
     """
     def __init__(self, songs: List[Song]):
+        """Store the song catalog for use in recommendations."""
         self.songs = songs
 
     def recommend(self, user: UserProfile, k: int = 5) -> List[Song]:
+        """Return the top k songs for the given user profile."""
         # TODO: Implement recommendation logic
         return self.songs[:k]
 
     def explain_recommendation(self, user: UserProfile, song: Song) -> str:
+        """Return a human-readable explanation for why a song was recommended."""
         # TODO: Implement explanation logic
         return "Explanation placeholder"
 
 def load_songs(csv_path: str) -> List[Dict]:
-    """
-    Loads songs from a CSV file.
-    Required by src/main.py
-    """
+    """Read songs.csv and return a list of dicts with correctly typed fields."""
     import csv
 
     songs = []
@@ -107,18 +107,7 @@ ADJACENT_MOODS: Dict[str, set] = {
 
 
 def score_song(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
-    """
-    Scores a single song against user preferences.
-    Returns a (score, reasons) tuple where reasons is a list of human-readable
-    strings explaining what contributed to the score.
-
-    Scoring weights (max 7.5 total):
-      mood exact match   +2.0  | adjacent  +1.0
-      energy proximity   up to +2.0
-      genre exact match  +1.5  | adjacent  +0.75
-      valence proximity  up to +1.5
-      acousticness prox. up to +0.5
-    """
+    """Score a single song against user preferences and return (score, reasons) where max score is 7.5."""
     score = 0.0
     reasons = []
 
@@ -164,10 +153,7 @@ def score_song(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
 
 
 def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tuple[Dict, float, str]]:
-    """
-    Functional implementation of the recommendation logic.
-    Required by src/main.py
-    """
+    """Score every song in the catalog and return the top k as (song, score, explanation) tuples."""
     scored = sorted(
         ((song, score, reasons) for song, (score, reasons) in
          ((song, score_song(user_prefs, song)) for song in songs)),
