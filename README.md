@@ -33,6 +33,35 @@ Some prompts to answer:
 
 You can include a simple diagram or bullet list if helpful.
 
+flowchart TD
+    A([User Preferences\ngenre · mood · energy · valence · acousticness]) --> D
+    B([songs.csv]) --> C
+
+    C[Read next song] --> D
+
+    D{Genre gate} -->|no match| SKIP([Discard song])
+    D -->|exact or adjacent| E
+
+    E{Mood gate} -->|no match| SKIP
+    E -->|exact or adjacent| F
+
+    F[Compute score\n\nmood_pts + energy_pts\n+ genre_pts + valence_pts\n+ acoustic_pts] --> G
+
+    G[Add song + score\nto candidate pool] --> H
+
+    H{More songs\nin CSV?} -->|yes| C
+    H -->|no| I
+
+    I[Sort candidate pool\nby score descending] --> J
+    J[Diversity guard\nmax 2 songs per artist] --> K
+    K[Take top K] --> L
+    L[Attach explanations\ntop 2 contributing factors] --> M
+
+    M([Top K Recommendations])
+
+
+  - Potential Biases: This system might make less important things such as valence or accoustics have no influence because of how big of a influence genre and mood have over other items.
+
 ---
 
 ## Getting Started
