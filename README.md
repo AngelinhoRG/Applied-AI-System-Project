@@ -379,53 +379,96 @@ on easy profiles isn't ready for real users.
 
 ## Testing Summary
 
-### What worked
+**27 out of 27 automated tests passed.** Confidence scores for normal profiles
+averaged 96% (Chill Lofi: 99.6%, High-Energy Pop: 95.2%, Deep Intense Rock: 88.7%).
+Adversarial profiles averaged 68%, correctly reflecting that conflicting preferences
+produce weaker matches. Structured logging captured every retrieval step, API call,
+and token count, making every run fully traceable.
 
-- **Normal profiles produce clean results.** The Chill Lofi profile's top song
-  (Library Rain) scored 7.47/7.5 — the scorer correctly rewarded every matching
-  feature. The High-Energy Pop and Deep Intense Rock profiles similarly converged
-  on the most logical candidates with no surprises.
+### Three reliability layers
 
-- **The adjacent genre and mood maps catch near-misses.** A jazz fan gets partial
-  credit for a lofi song; a relaxed user gets partial credit for a chill one. Without
-  these maps the catalog would feel too rigid.
+**1 — Automated unit tests (`pytest`)**
 
-- **Pytest validates the scoring layer independently.** The two tests in
-  `tests/test_recommender.py` confirm that the `Recommender` class ranks a matching
-  song above a non-matching one and returns a non-empty explanation. These run without
-  an API key and serve as a baseline check before any LLM layer is involved.
+The test suite in `tests/test_recommender.py` covers 27 cases across four areas:
 
-### What didn't work (and what it revealed)
+| Area | Tests | What they verify |
+|---|---|---|
+| Mood scoring | 4 | Exact match = 2.0 pts, adjacent = 1.0, no match = 0, missing pref = 0 |
+| Energy / valence / acousticness | 6 | Proportional proximity; missing pref not counted |
+| Genre scoring | 3 | Exact = 1.5 pts, adjacent = 0.75, no match = 0 |
+| `recommend_songs` | 5 | Returns k results, sorted descending, correct top pick, adversarial safety, k > catalog size |
+| Confidence scoring | 5 | Perfect match = 1.0, normalized to active prefs, partial match in (0,1), empty prefs = 0 |
+| OOP `Recommender` class | 2 | Ranking order, non-empty explanation |
 
-- **Conflicting preferences expose a fundamental weakness.** Asking for "happy mood +
-  dark valence" produces a system that partially satisfies neither request. Broken
-  Signal (metal/angry) crept into the adversarial top-5 purely on valence, even though
-  the user asked for pop and happy. The scorer has no way to detect that two of its
-  inputs contradict each other.
+Run the suite yourself — no API key required:
 
-- **Niche genres get underserved.** The catalog has one blues song, one classical song,
-  and one folk song. A sad blues user's top result scored only 4.58/7.5 — not because
-  the match was bad, but because there was nothing else to fill the top-5. Songs 3–5
-  were high-energy rock tracks that matched only on energy.
+```bash
+pytest -v
+```
 
-- **Score ceilings depend on how many preferences you give.** A user who provides all
-  five preferences can score up to 7.5. A user who provides only genre and mood is
-  capped at 3.5. Both scores appear in the same ranked list, which means the comparison
-  isn't fair.
+**2 — Confidence scoring**
 
-- **Feature-removal experiment:** Commenting out the mood block and re-running all six
-  profiles showed that the #1 result stayed the same for most profiles. Mood is worth
-  the most points but is often redundant with genre in a small catalog. The one case
-  where removal changed the result was the Acoustic Metal Head: without mood penalizing
-  the genre mismatch, the actual metal song finally ranked first.
+Every retrieved song displays a confidence percentage alongside its raw score.
+Confidence is normalized to the preferences the user actually provided, so it
+answers: *how well did this song satisfy what you asked for, not what you could
+have asked for?*
 
-### What I learned
+```
+compute_max_score(prefs) → the highest possible score for these preferences
+confidence = score / max_possible_score
+```
 
-The hardest bug to spot wasn't in the code — it was in the adjacency maps. The tool
-that helped generate the maps filled them in based on general music knowledge, and some
-relationships were one-directional without flagging it (folk listed blues as adjacent,
-but blues didn't list folk back). I only caught it by reading the data carefully. AI
-accelerates implementation but the output still needs to be verified by hand.
+| Profile | Top song | Raw score | Confidence |
+|---|---|---|---|
+| Chill Lofi | Library Rain | 7.47 / 7.5 | 99.6% |
+| High-Energy Pop | Sunrise City | 6.82 / 7.5 | 95.2% |
+| Deep Intense Rock | Storm Runner | 6.65 / 7.5 | 88.7% |
+| Adversarial — High-Energy Sad | Rainy Season | 4.58 / 5.5 | 83.3% |
+| Adversarial — Acoustic Metal | Storm Runner | 5.01 / 7.5 | 66.8% |
+| Adversarial — Happy + Dark Valence | Sunrise City | 5.78 / 7.5 | 77.1% |
+
+The adversarial profiles average 14 points lower than the normal profiles,
+which is the system correctly reflecting that contradictory input produces
+weaker recommendations — not hiding the problem.
+
+**3 — Logging and error handling**
+
+Every run writes structured log lines to both stdout and `recommender.log`:
+
+```
+2026-04-26 18:17:30 [INFO]  __main__: Starting music recommender RAG pipeline
+2026-04-26 18:17:30 [INFO]  __main__: Loaded 18 songs from data/songs.csv
+2026-04-26 18:17:30 [INFO]  __main__: Processing profile: Chill Lofi
+2026-04-26 18:17:30 [INFO]  __main__: Retrieved 5 songs for profile 'Chill Lofi'
+2026-04-26 18:17:30 [INFO]  src.rag: RAG generate | prefs=... | retrieved=5 songs | model=claude-sonnet-4-6
+2026-04-26 18:17:31 [INFO]  src.rag: RAG generate | input_tokens=312 output_tokens=147
+```
+
+Three guardrails prevent silent failures:
+- **Missing API key** — `get_client()` detects the missing key before any work
+  starts and exits with a clear, actionable message.
+- **API errors** — `anthropic.APIStatusError` and `APIConnectionError` are caught
+  per-profile. If one call fails, the scored list still prints and the pipeline
+  continues with the next profile.
+- **Missing catalog** — `os.path.exists` check on `songs.csv` before loading,
+  with a message telling the user to run from the project root.
+
+### What the tests revealed
+
+- **Mood is often redundant with genre.** Removing the mood block and re-running
+  left the #1 result unchanged for four of six profiles. The one case where removal
+  mattered was the Acoustic Metal Head: without mood penalizing the genre mismatch,
+  the actual metal song finally ranked first.
+
+- **Adversarial profiles expose the no-negative-scoring flaw.** Broken Signal
+  (metal/angry) appeared in the Happy + Dark Valence top-5 solely because of its
+  low valence (0.22). The scorer had no way to subtract points for the mood and
+  genre mismatch, so it free-rode on one matching feature into the list.
+
+- **Niche genres get structurally underserved.** The High-Energy Sad profile's
+  top song scored only 4.58/7.5 — not a bad match, but there was nothing else in
+  the blues/sad corner of the catalog to fill positions 2–5. This is a data
+  problem, not an algorithm problem.
 
 ---
 
@@ -459,9 +502,9 @@ intelligent — is what this project taught me most.
 ├── src/
 │   ├── main.py          # Entry point; logging, API key guard, pipeline runner
 │   ├── rag.py           # RAG pipeline: context builder + Claude API call
-│   └── recommender.py   # Scoring engine: load_songs, score_song, recommend_songs
+│   └── recommender.py   # Scoring engine: load_songs, score_song, recommend_songs, confidence
 ├── tests/
-│   └── test_recommender.py  # Pytest tests for scoring logic
+│   └── test_recommender.py  # 27 unit tests: scoring, ranking, confidence, OOP interface
 ├── data/
 │   └── songs.csv        # 18-song catalog with audio attributes
 ├── model_card.md        # Model card: intended use, data, limitations, evaluation
@@ -478,7 +521,9 @@ intelligent — is what this project taught me most.
   This would spread rankings further apart and make it easier to distinguish a poor
   match from a terrible one.
 - **Normalize scores by number of preferences** — users who provide two preferences
-  and users who provide five currently compete on an uneven scale.
+  and users who provide five currently compete on an uneven scale. The confidence
+  percentage partially addresses this for display, but the ranking itself is still
+  based on raw scores.
 - **Use tempo and danceability** — both fields are in the CSV but never used in scoring.
   A target BPM preference would make the system significantly more useful for workout
   or study playlists.

@@ -29,7 +29,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from .recommender import load_songs, recommend_songs  # noqa: E402
+from .recommender import load_songs, recommend_songs, confidence  # noqa: E402
 from .rag import run_rag_pipeline  # noqa: E402
 
 
@@ -113,16 +113,17 @@ def get_client() -> anthropic.Anthropic:
     return anthropic.Anthropic(api_key=api_key)
 
 
-def print_retrieved(label: str, recommendations, k: int) -> None:
-    """Print the retrieval layer results (scored songs)."""
+def print_retrieved(label: str, recommendations, prefs: dict, k: int) -> None:
+    """Print the retrieval layer results (scored songs) with confidence percentages."""
     print("\n" + "=" * 64)
     print(f"  Profile : {label}")
     print(f"  Top {k} Retrieved Songs (scored by preference match)")
     print("=" * 64)
     for rank, (song, score, explanation) in enumerate(recommendations, start=1):
+        conf_pct = confidence(score, prefs) * 100
         print(f"\n  #{rank}  {song['title']}  —  {song['artist']}")
         print(f"       Genre: {song['genre']}  |  Mood: {song['mood']}")
-        print(f"       Score: {score:.2f} / 7.5")
+        print(f"       Score: {score:.2f} / 7.5  |  Confidence: {conf_pct:.1f}%")
         for reason in explanation.split(", "):
             print(f"       + {reason}")
 
@@ -164,7 +165,7 @@ def main() -> None:
         top_songs = recommend_songs(prefs, songs, k=k)
         logger.info("Retrieved %d songs for profile '%s'", len(top_songs), label)
 
-        print_retrieved(label, top_songs, k)
+        print_retrieved(label, top_songs, prefs, k)
 
         # Generation — Claude reasons from the retrieved context
         try:

@@ -161,3 +161,31 @@ def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tup
         reverse=True,
     )
     return [(song, score, ", ".join(reasons)) for song, score, reasons in scored[:k]]
+
+
+def compute_max_score(user_prefs: Dict) -> float:
+    """Return the highest score any song could theoretically earn for these preferences.
+
+    Only preferences that were actually provided contribute to the ceiling,
+    so confidence is always relative to what the user asked for.
+    """
+    max_score = 0.0
+    if user_prefs.get("mood"):
+        max_score += 2.0
+    if "energy" in user_prefs:
+        max_score += 2.0
+    if user_prefs.get("genre"):
+        max_score += 1.5
+    if "valence" in user_prefs:
+        max_score += 1.5
+    if "acousticness" in user_prefs:
+        max_score += 0.5
+    return max_score
+
+
+def confidence(score: float, user_prefs: Dict) -> float:
+    """Return a 0.0–1.0 confidence value: how close this score is to the best possible match."""
+    max_score = compute_max_score(user_prefs)
+    if max_score == 0.0:
+        return 0.0
+    return round(min(score / max_score, 1.0), 3)
