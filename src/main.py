@@ -11,8 +11,9 @@ Flow:
 import logging
 import os
 import sys
+import time
 
-import anthropic
+from google import genai
 from dotenv import load_dotenv
 
 # Load .env before anything else so ANTHROPIC_API_KEY is available
@@ -101,16 +102,16 @@ PROFILES = [
 ]
 
 
-def get_client() -> anthropic.Anthropic:
-    """Return an Anthropic client, or exit with a clear message if the key is missing."""
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+def get_client() -> genai.Client:
+    """Return a Gemini client, or exit with a clear message if the key is missing."""
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         logger.error(
-            "ANTHROPIC_API_KEY is not set. "
+            "GEMINI_API_KEY is not set. "
             "Copy .env.example to .env and add your key, then try again."
         )
         sys.exit(1)
-    return anthropic.Anthropic(api_key=api_key)
+    return genai.Client(api_key=api_key)
 
 
 def print_retrieved(label: str, recommendations, prefs: dict, k: int) -> None:
@@ -167,11 +168,12 @@ def main() -> None:
 
         print_retrieved(label, top_songs, prefs, k)
 
-        # Generation — Claude reasons from the retrieved context
+        # Generation — Gemini reasons from the retrieved context
+        time.sleep(13)  # stay within free tier rate limit (5 req/min)
         try:
             narrative = run_rag_pipeline(prefs, top_songs, client)
             print_ai_narrative(narrative)
-        except anthropic.APIError as exc:
+        except Exception as exc:
             logger.error(
                 "Skipping AI narrative for '%s' due to API error: %s", label, exc
             )

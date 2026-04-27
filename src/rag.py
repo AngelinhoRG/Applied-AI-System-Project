@@ -5,19 +5,18 @@ Retrieval  — already done by recommend_songs() in recommender.py, which scores
              every song and returns the top-K matches with reasons.
 Augmented  — those top-K songs and their attributes are packed into a context
              block that becomes part of the prompt.
-Generation — Claude reads that context and writes a narrative that actively
+Generation — Gemini reads that context and writes a narrative that actively
              reasons from the song data rather than just listing titles.
 """
 
 import logging
 from typing import Dict, List, Tuple
 
-import anthropic
+from google import genai
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-sonnet-4-6"
-MAX_TOKENS = 350
+MODEL = "gemini-2.5-flash"
 
 
 def _build_context(user_prefs: Dict, top_songs: List[Tuple[Dict, float, str]]) -> str:
@@ -58,11 +57,11 @@ Rules:
 def generate_recommendation(
     user_prefs: Dict,
     top_songs: List[Tuple[Dict, float, str]],
-    client: anthropic.Anthropic,
+    client: genai.Client,
 ) -> str:
     """
-    Send the retrieved context to Claude and return the generated narrative.
-    Raises anthropic.APIError subclasses on failure — callers decide how to handle.
+    Send the retrieved context to Gemini and return the generated narrative.
+    Raises on failure — callers decide how to handle.
     """
     context = _build_context(user_prefs, top_songs)
     logger.info(
@@ -72,26 +71,19 @@ def generate_recommendation(
         MODEL,
     )
 
-    response = client.messages.create(
+    response = client.models.generate_content(
         model=MODEL,
-        max_tokens=MAX_TOKENS,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": context}],
+        contents=_SYSTEM_PROMPT + "\n\n" + context,
     )
-
-    output = response.content[0].text
-    logger.info(
-        "RAG generate | input_tokens=%d output_tokens=%d",
-        response.usage.input_tokens,
-        response.usage.output_tokens,
-    )
+    output = response.text
+    logger.info("RAG generate | output_length=%d chars", len(output))
     return output
 
 
 def run_rag_pipeline(
     user_prefs: Dict,
     top_songs: List[Tuple[Dict, float, str]],
-    client: anthropic.Anthropic,
+    client: genai.Client,
 ) -> str:
     """
     Full RAG pipeline entry point.
@@ -103,11 +95,6 @@ def run_rag_pipeline(
 
     try:
         return generate_recommendation(user_prefs, top_songs, client)
-    except anthropic.APIStatusError as exc:
-        logger.error(
-            "Claude API error | status=%s message=%s", exc.status_code, exc.message
-        )
-        raise
-    except anthropic.APIConnectionError as exc:
-        logger.error("Claude API connection error: %s", exc)
+    except Exception as exc:
+        logger.error("Gemini API error: %s", exc)
         raise
