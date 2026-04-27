@@ -116,3 +116,111 @@ genre points and sneaking into the bottom of top-5 lists. A better system would
 subtract points for a mood mismatch (intense ≠ happy) rather than simply giving
 zero for that dimension. Until then, Gym Hero is essentially free-riding on its
 high energy number into playlists it doesn't belong in.
+
+---
+
+## Critical Reflection
+
+### Limitations and Biases in the System
+
+The most significant limitation is that the scorer treats every feature independently.
+It awards points for mood, adds points for energy, adds points for genre, and sums them
+up — but it never recognizes when two preferences contradict each other. "Happy mood +
+dark valence" is nonsensical to a human but perfectly legal to the scorer. As a result,
+songs end up in playlists where they clearly don't belong, like Broken Signal (metal/angry)
+sneaking into a happy pop profile because its low valence happened to match the user's
+low-valence request.
+
+A related bias is catalog depth. Users with mainstream tastes (pop, happy, high energy)
+get five strong matches because many songs were written with those attributes. Users with
+niche or edge-case preferences (blues, sad) hit a wall fast — the first match is solid,
+and then the system starts filling slots with off-topic songs that scored points on energy
+alone. The recommender doesn't fail loudly when it runs out of good matches; it silently
+serves mediocre ones. That is a bias toward the majority of the catalog, which itself
+was likely curated with mainstream tastes in mind.
+
+There is also a scoring-ceiling bias. A user who provides more preferences (genre, mood,
+energy, valence, and acousticness) raises the maximum possible score from 4.0 to 7.5,
+which makes their confidence percentages look lower for the same quality of match.
+The system inadvertently penalizes users for giving more information.
+
+---
+
+### Could the AI Be Misused, and How Would I Prevent It?
+
+The Claude-powered generation layer is the part most exposed to misuse. A user could
+craft a preference input designed to push unusual, offensive, or harmful content into
+the system prompt — for example, embedding instructions in a fake "genre" or "mood"
+field that tries to redirect Claude's behavior (prompt injection). The current system
+trusts user-supplied preference strings directly into the context it sends to the model.
+
+To prevent this I would:
+
+1. **Validate and sanitize inputs** before they reach the prompt. Genre and mood values
+   should be matched against a fixed allowlist; any string that doesn't match a known
+   value gets rejected or stripped rather than passed through raw.
+2. **Keep the system prompt strictly grounding.** The current prompt already tells Claude
+   to reason only from retrieved songs and not to reference anything outside the list.
+   That is a meaningful guardrail — it limits the blast radius if a bad input gets through.
+3. **Rate-limit and log every API call.** The existing logging setup captures input and
+   output token counts per request. Extending that to flag unusually long user-supplied
+   strings or anomalous outputs would make abuse visible before it scales.
+
+The music domain is low-stakes — the worst realistic misuse is producing off-topic or
+nonsensical recommendations, not harm to a person. But the same injection patterns that
+would work here would work in higher-stakes RAG systems, so treating this as a practice
+ground for good hygiene matters.
+
+---
+
+### What Surprised Me While Testing the AI's Reliability
+
+The biggest surprise was how gracefully the scorer failed. I expected the adversarial
+profiles to produce errors or crashes. They didn't — they produced confidently wrong
+answers. The Acoustic Metal Head profile returned a top recommendation with a confidence
+score of 62.7%, which sounds passable until you realize the song is rock, not metal, and
+has basically no acoustic quality. The system never flagged the contradiction. It just
+found the least-bad option and reported it with mild confidence, as if everything had
+gone fine.
+
+The second surprise was how much the no-negative-scoring floor mattered in practice.
+I knew theoretically that scores bottom out at zero rather than going negative, but
+I didn't anticipate how badly that distorts results until I saw Gym Hero appearing in
+playlists for Rock, Sad, and even adversarial profiles. Songs don't get penalized for
+being wrong — they only fail to accumulate points. In a small 30-song catalog that
+effect is visible in almost every run.
+
+Finally, I was surprised that the confidence averages held up as well as they did.
+Normal profiles averaged around 96% confidence — that's the system working as designed.
+Adversarial profiles averaged around 68%, which is lower but not catastrophically so.
+I expected the conflicting-preference profiles to expose deeper failures. They exposed
+real weaknesses, but the scoring engine absorbed the contradictions without breaking.
+That is either a sign of robustness or of a system that doesn't know what it doesn't know.
+
+---
+
+### Collaboration with AI During This Project
+
+I used Claude Code as a collaborator throughout the build. The collaboration was genuinely
+useful in most places, but not perfect.
+
+**One instance where the AI gave a helpful suggestion:** When I described wanting the RAG
+pipeline to "actively use retrieved data," the AI proposed a system prompt constraint that
+explicitly forbids Claude from listing song titles alone — instead requiring it to cite
+specific attribute values (energy, valence, acousticness, tempo) in its reasoning. That
+was a design decision I would not have thought to formalize in a prompt rule. The result
+is that every generated narrative is grounded in the actual numbers from the retrieval
+layer, not just the song names. Without that prompt constraint, the AI narrative would
+have looked convincing but proved nothing about whether the retrieval was actually used.
+
+**One instance where the AI's suggestion was flawed:** Early in the project the AI
+suggested running the main script as `python src/main.py` directly. That worked when
+`src/` was not a package, but the moment I added `src/__init__.py` (required for the
+tests to resolve `from src.recommender import ...`), direct execution broke with a
+`ModuleNotFoundError` because the relative imports (`from .recommender import ...`)
+require the module to be run as `python -m src.main`. The AI initially presented
+the direct-file approach as the correct setup step and only corrected it after the
+import error surfaced. The lesson: the AI gave advice that was locally correct in one
+context (before `__init__.py` existed) but failed to anticipate how a later change
+would invalidate it. I now verify every setup step myself in a clean environment rather
+than trusting that an individually correct suggestion will compose well with other changes.
