@@ -13,3 +13,9 @@ venv/
 
 # Pytest cache
 .pytest_cache/
+
+# Environment variables (never commit your API key)
+.env
+
+# Runtime log
+recommender.log
