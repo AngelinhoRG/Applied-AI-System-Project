@@ -1,5 +1,7 @@
 # Music Recommender with RAG
 
+📹 **[Video Walkthrough](https://www.loom.com/share/041021772dbd4a6b97b1ae2298c8563e)**
+
 A music recommendation system that combines a handcrafted scoring engine with
 Retrieval-Augmented Generation (RAG). The scoring engine retrieves the best-matching
 songs from a catalog; Gemini then reads those songs' actual attributes — energy levels,
