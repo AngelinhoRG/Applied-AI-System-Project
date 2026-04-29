@@ -2,7 +2,7 @@
 
 A music recommendation system that combines a handcrafted scoring engine with
 Retrieval-Augmented Generation (RAG). The scoring engine retrieves the best-matching
-songs from a catalog; Claude then reads those songs' actual attributes — energy levels,
+songs from a catalog; Gemini then reads those songs' actual attributes — energy levels,
 valence, tempo, acousticness — and writes a personalized narrative that reasons from
 the data rather than restating it.
 
@@ -16,7 +16,7 @@ data into predictions, and where they break down.
 Most "AI-powered" recommendation UIs show you a list and add a generic caption.
 This project does something different: the language model receives the retrieved songs
 as grounded context and is required to cite specific attribute values in its explanation.
-If a song ranks highly because its acousticness (0.86) matches your preference, Claude
+If a song ranks highly because its acousticness (0.86) matches your preference, Gemini
 says that — not "this song fits your vibe." That distinction matters because transparent
 reasoning is more trustworthy and more useful than confident-sounding output.
 
@@ -44,8 +44,8 @@ flowchart TD
     subgraph RAG["RAG Pipeline — rag.py"]
         E["_build_context()
         serialize attributes + scores"]
-        F["Claude API
-        claude-sonnet-4-6"]
+        F["Gemini API
+        gemini-2.5-flash"]
         E --> F
     end
 
@@ -93,7 +93,7 @@ entirely locally with no API calls.
 
 **RAG Pipeline (`src/rag.py`)** — `_build_context()` packs the top-K songs and their
 full attribute values into a structured text block. That block becomes the user message
-sent to Claude. The system prompt instructs Claude to cite specific numbers from the
+sent to Gemini. The system prompt instructs Gemini to cite specific numbers from the
 retrieved data in its explanation, not generate a generic response alongside the list.
 
 **Guardrails** — Three checkpoints prevent silent failures: `pytest` validates the
@@ -113,7 +113,7 @@ API usage is always traceable.
 ### Prerequisites
 
 - Python 3.9 or later
-- An Anthropic API key — get one at [console.anthropic.com](https://console.anthropic.com/)
+- A Gemini API key (free) — get one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
 
 ### Steps
 
@@ -142,7 +142,8 @@ API usage is always traceable.
 
    ```bash
    cp .env.example .env
-   # Open .env and replace "your_api_key_here" with your real key
+   # Open .env and replace "your_api_key_here" with your Gemini API key
+   # GEMINI_API_KEY=your_key_here
    ```
 
 5. **Run the recommender:**
@@ -440,16 +441,15 @@ Every run writes structured log lines to both stdout and `recommender.log`:
 2026-04-26 18:17:30 [INFO]  __main__: Loaded 18 songs from data/songs.csv
 2026-04-26 18:17:30 [INFO]  __main__: Processing profile: Chill Lofi
 2026-04-26 18:17:30 [INFO]  __main__: Retrieved 5 songs for profile 'Chill Lofi'
-2026-04-26 18:17:30 [INFO]  src.rag: RAG generate | prefs=... | retrieved=5 songs | model=claude-sonnet-4-6
-2026-04-26 18:17:31 [INFO]  src.rag: RAG generate | input_tokens=312 output_tokens=147
+2026-04-26 18:17:30 [INFO]  src.rag: RAG generate | prefs=... | retrieved=5 songs | model=gemini-2.5-flash
+2026-04-26 18:17:31 [INFO]  src.rag: RAG generate | output_length=708 chars
 ```
 
 Three guardrails prevent silent failures:
 - **Missing API key** — `get_client()` detects the missing key before any work
   starts and exits with a clear, actionable message.
-- **API errors** — `anthropic.APIStatusError` and `APIConnectionError` are caught
-  per-profile. If one call fails, the scored list still prints and the pipeline
-  continues with the next profile.
+- **API errors** — Gemini API errors are caught per-profile. If one call fails,
+  the scored list still prints and the pipeline continues with the next profile.
 - **Missing catalog** — `os.path.exists` check on `songs.csv` before loading,
   with a message telling the user to run from the project root.
 
@@ -501,7 +501,7 @@ intelligent — is what this project taught me most.
 .
 ├── src/
 │   ├── main.py          # Entry point; logging, API key guard, pipeline runner
-│   ├── rag.py           # RAG pipeline: context builder + Claude API call
+│   ├── rag.py           # RAG pipeline: context builder + Gemini API call
 │   └── recommender.py   # Scoring engine: load_songs, score_song, recommend_songs, confidence
 ├── tests/
 │   └── test_recommender.py  # 27 unit tests: scoring, ranking, confidence, OOP interface
@@ -510,7 +510,7 @@ intelligent — is what this project taught me most.
 ├── model_card.md        # Model card: intended use, data, limitations, evaluation
 ├── reflection.md        # Detailed profile comparison analysis
 ├── .env.example         # API key template
-└── requirements.txt     # anthropic, python-dotenv, pandas, pytest, streamlit
+└── requirements.txt     # google-genai, python-dotenv, pandas, pytest, streamlit
 ```
 
 ---
