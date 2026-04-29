@@ -87,7 +87,7 @@ flowchart TD
 
 ### How the architecture works
 
-**Retriever (`src/recommender.py`)** — `score_song()` runs against all 18 songs for a
+**Retriever (`src/recommender.py`)** — `score_song()` runs against all songs for a
 given user profile. Each feature (mood, energy, genre, valence, acousticness) contributes
 points up to a maximum total of 7.5. Songs are ranked by total score and the top-K are
 returned with a breakdown of which features matched and by how much. This step runs
@@ -100,7 +100,7 @@ retrieved data in its explanation, not generate a generic response alongside the
 
 **Guardrails** — Three checkpoints prevent silent failures: `pytest` validates the
 scoring logic independently of the LLM; three adversarial profiles challenge the
-retriever with contradictory preferences before results ever reach Claude; and
+retriever with contradictory preferences before results ever reach Gemini; and
 `get_client()` catches a missing API key before any work begins and exits with a
 clear, actionable message.
 
