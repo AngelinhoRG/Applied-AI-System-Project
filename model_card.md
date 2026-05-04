@@ -43,8 +43,10 @@ subtracts points — the lowest any feature can contribute is 0.
 
 ## 4. Data
 
-The catalog has 18 songs. Each song has a title, artist, genre, mood, energy level,
-tempo, valence, danceability, and acousticness score.
+The starter catalog has 18 hand-curated songs. It can be expanded using
+`scripts/fetch_spotify.py`, which pulls real tracks and audio features from the
+Spotify API and appends them to `data/songs.csv`. Each song has a title, artist,
+genre, mood, energy level, tempo, valence, danceability, and acousticness score.
 
 The genres covered are: pop, lofi, rock, ambient, jazz, synthwave, indie pop,
 country, metal, r&b, EDM, blues, folk, classical, and hip-hop.
@@ -52,8 +54,8 @@ country, metal, r&b, EDM, blues, folk, classical, and hip-hop.
 The moods covered are: happy, chill, intense, focused, relaxed, moody, nostalgic,
 romantic, melancholic, angry, euphoric, sad, dreamy, and confident.
 
-The catalog is small and uneven. Pop, rock, and lofi each have multiple songs, but
-genres like classical, folk, blues, and metal each have only one song. There are no
+The starter catalog is small and uneven. Pop, rock, and lofi each have multiple
+songs, but genres like classical, folk, blues, and metal each have only one song. There are no
 songs that cover tempo preferences directly, and danceability is stored but never
 used in scoring. The dataset also has no concept of artist familiarity, release year,
 or listener history.

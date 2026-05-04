@@ -72,20 +72,23 @@ def load_songs(csv_path: str) -> List[Dict]:
 
 ADJACENT_GENRES: Dict[str, set] = {
     "lofi":      {"ambient", "jazz"},
-    "ambient":   {"lofi", "classical"},
+    "ambient":   {"lofi", "classical", "world"},
     "jazz":      {"r&b", "blues", "lofi"},
-    "pop":       {"indie pop", "r&b"},
+    "pop":       {"indie pop", "r&b", "latin"},
     "indie pop": {"pop", "r&b"},
     "rock":      {"metal", "synthwave"},
     "metal":     {"rock"},
     "synthwave": {"rock", "edm"},
     "edm":       {"synthwave", "pop"},
-    "r&b":       {"jazz", "hip-hop", "pop"},
-    "hip-hop":   {"r&b", "pop"},
-    "blues":     {"jazz", "country"},
+    "r&b":       {"jazz", "hip-hop", "pop", "latin"},
+    "hip-hop":   {"r&b", "pop", "reggae"},
+    "blues":     {"jazz", "country", "reggae"},
     "country":   {"folk", "blues"},
-    "folk":      {"country", "blues"},
+    "folk":      {"country", "blues", "world"},
     "classical": {"ambient"},
+    "reggae":    {"hip-hop", "blues", "r&b", "folk"},
+    "latin":     {"pop", "r&b", "reggae"},
+    "world":     {"ambient", "folk", "latin"},
 }
 
 ADJACENT_MOODS: Dict[str, set] = {

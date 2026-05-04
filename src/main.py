@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 from .recommender import load_songs, recommend_songs, confidence  # noqa: E402
 from .rag import run_rag_pipeline  # noqa: E402
+from .cli import collect_user_profile  # noqa: E402
 
 
 PROFILES = [
@@ -137,10 +138,46 @@ def print_ai_narrative(narrative: str) -> None:
     print("=" * 64)
 
 
+def _show_menu() -> str:
+    """Display the main menu and return the user's validated choice."""
+    print("\n" + "=" * 64)
+    print("  Music Recommender")
+    print("=" * 64)
+    print("  1  Build my own profile")
+    print("  2  Run pre-made profiles (demo / test)")
+    print("  3  Run both")
+    print("  q  Quit")
+    valid = {"1", "2", "3", "q"}
+    while True:
+        choice = input("\n  Choose an option: ").strip().lower()
+        if choice in valid:
+            return choice
+        print(f"  Invalid choice. Enter one of: {', '.join(sorted(valid))}")
+
+
+def _run_profile(label: str, prefs: dict, songs: list, client: genai.Client, k: int) -> None:
+    """Retrieve top-K songs for one profile and generate the AI narrative."""
+    logger.info("Processing profile: %s", label)
+
+    top_songs = recommend_songs(prefs, songs, k=k)
+    logger.info("Retrieved %d songs for profile '%s'", len(top_songs), label)
+
+    print_retrieved(label, top_songs, prefs, k)
+
+    time.sleep(13)  # stay within free tier rate limit (5 req/min)
+    try:
+        narrative = run_rag_pipeline(prefs, top_songs, client)
+        print_ai_narrative(narrative)
+    except (ValueError, RuntimeError, OSError) as exc:
+        logger.error("Skipping AI narrative for '%s' due to API error: %s", label, exc)
+        print("\n  [AI narrative unavailable — see recommender.log for details]")
+        print("=" * 64)
+
+
 def main() -> None:
+    """Entry point: present a menu, collect preferences, run the RAG pipeline."""
     logger.info("Starting music recommender RAG pipeline")
 
-    # Guardrail: verify API key before doing any other work
     client = get_client()
 
     csv_path = "data/songs.csv"
@@ -155,30 +192,19 @@ def main() -> None:
     logger.info("Loaded %d songs from %s", len(songs), csv_path)
 
     k = 5
+    choice = _show_menu()
 
-    for profile in PROFILES:
-        label = profile["label"]
-        prefs = profile["prefs"]
+    if choice == "q":
+        logger.info("User quit at menu")
+        return
 
-        logger.info("Processing profile: %s", label)
+    if choice in ("1", "3"):
+        prefs = collect_user_profile()
+        _run_profile("Custom Profile", prefs, songs, client, k)
 
-        # Retrieval — score every song and keep top-K
-        top_songs = recommend_songs(prefs, songs, k=k)
-        logger.info("Retrieved %d songs for profile '%s'", len(top_songs), label)
-
-        print_retrieved(label, top_songs, prefs, k)
-
-        # Generation — Gemini reasons from the retrieved context
-        time.sleep(13)  # stay within free tier rate limit (5 req/min)
-        try:
-            narrative = run_rag_pipeline(prefs, top_songs, client)
-            print_ai_narrative(narrative)
-        except Exception as exc:
-            logger.error(
-                "Skipping AI narrative for '%s' due to API error: %s", label, exc
-            )
-            print("\n  [AI narrative unavailable — see recommender.log for details]")
-            print("=" * 64)
+    if choice in ("2", "3"):
+        for profile in PROFILES:
+            _run_profile(profile["label"], profile["prefs"], songs, client, k)
 
     logger.info("Pipeline complete")
 

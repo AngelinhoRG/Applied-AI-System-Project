@@ -2,4 +2,5 @@ google-genai>=1.0.0
 pandas
 pytest
 python-dotenv>=1.0.0
+spotipy>=2.23.0
 streamlit

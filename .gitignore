@@ -19,3 +19,6 @@ venv/
 
 # Runtime log
 recommender.log
+
+# Spotify OAuth token cache
+.cache

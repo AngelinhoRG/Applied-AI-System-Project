@@ -32,10 +32,10 @@ flowchart TD
     genre · mood · energy
     valence · acousticness"]
     B[("🗄️ songs.csv
-    18 songs")]
+    expandable catalog")]
 
     subgraph Retriever["Retriever — recommender.py"]
-        C["score_song() × 18
+        C["score_song() × N
         mood · energy · genre
         valence · acousticness"]
         D["Top-K songs
@@ -87,8 +87,8 @@ flowchart TD
 
 ### How the architecture works
 
-**Retriever (`src/recommender.py`)** — `score_song()` runs against all songs for a
-given user profile. Each feature (mood, energy, genre, valence, acousticness) contributes
+**Retriever (`src/recommender.py`)** — `score_song()` runs against all songs in the
+catalog for a given user profile. Each feature (mood, energy, genre, valence, acousticness) contributes
 points up to a maximum total of 7.5. Songs are ranked by total score and the top-K are
 returned with a breakdown of which features matched and by how much. This step runs
 entirely locally with no API calls.
@@ -116,6 +116,7 @@ API usage is always traceable.
 
 - Python 3.9 or later
 - A Gemini API key (free) — get one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- A Spotify app (free, optional) — required for future user account integration and `scripts/fetch_spotify.py`; get credentials at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard). Note: Spotify restricted several API endpoints for new apps in Nov 2024 — see the note in `fetch_spotify.py`.
 
 ### Steps
 
@@ -140,12 +141,14 @@ API usage is always traceable.
    pip install -r requirements.txt
    ```
 
-4. **Add your API key:**
+4. **Add your API keys:**
 
    ```bash
    cp .env.example .env
-   # Open .env and replace "your_api_key_here" with your Gemini API key
-   # GEMINI_API_KEY=your_key_here
+   # Open .env and fill in your keys:
+   # GEMINI_API_KEY=your_gemini_key          # required
+   # SPOTIFY_CLIENT_ID=your_spotify_id       # optional — catalog expansion only
+   # SPOTIFY_CLIENT_SECRET=your_spotify_secret
    ```
 
 5. **Run the recommender:**
@@ -347,11 +350,12 @@ The model's job is reasoning, not recall.
 
 ### Why a handcrafted scorer instead of embeddings
 
-With 18 songs and no listener history, a vector embedding approach would be
-overengineered and fragile — there isn't enough data for semantic similarity to
-mean anything. The explicit scoring weights are easier to inspect, debug, and
-explain, which matters in a project where transparency is a goal. The trade-off is
-that the scorer can't generalize beyond the features it was programmed to consider.
+The scorer was originally designed for an 18-song catalog where semantic similarity
+would have been meaningless. The catalog has since grown to ~90k songs, but the
+explicit scoring weights remain the right choice here: they are easy to inspect,
+debug, and explain, which matters in a project where transparency is a goal. The
+trade-off is that the scorer can't generalize beyond the features it was programmed
+to consider, and there is no learning from listener history.
 
 ### Scoring weight trade-offs
 
@@ -502,17 +506,23 @@ intelligent — is what this project taught me most.
 ```
 .
 ├── src/
-│   ├── main.py          # Entry point; logging, API key guard, pipeline runner
-│   ├── rag.py           # RAG pipeline: context builder + Gemini API call
-│   └── recommender.py   # Scoring engine: load_songs, score_song, recommend_songs, confidence
+│   ├── main.py              # Entry point: menu, logging, API key guard, pipeline runner
+│   ├── recommender.py       # Scoring engine: load_songs, score_song, recommend_songs, confidence
+│   ├── rag.py               # RAG pipeline: context builder + Gemini API call
+│   └── cli.py               # Interactive CLI: collects a custom user profile at runtime
+├── scripts/                 # Catalog expansion — none of these are required to run the app
+│   ├── import_kaggle.py     # Import from spotify-tracks-dataset.csv (114k songs, measured features)
+│   ├── generate_songs.py    # Generate songs via Gemini for genres thin in the Kaggle dataset
+│   └── fetch_spotify.py     # Spotify API import (requires extended access — see note in file)
 ├── tests/
 │   └── test_recommender.py  # 27 unit tests: scoring, ranking, confidence, OOP interface
 ├── data/
-│   └── songs.csv        # 18-song catalog with audio attributes
+│   ├── songs.csv                   # Active song catalog (~90k songs across 18 genres)
+│   └── spotify-tracks-dataset.csv  # Kaggle source dataset (114k tracks, not committed to git)
 ├── model_card.md        # Model card: intended use, data, limitations, evaluation
 ├── reflection.md        # Detailed profile comparison analysis
 ├── .env.example         # API key template
-└── requirements.txt     # google-genai, python-dotenv, pandas, pytest, streamlit
+└── requirements.txt     # google-genai, python-dotenv, pandas, pytest, spotipy, streamlit
 ```
 
 ---
@@ -531,6 +541,9 @@ intelligent — is what this project taught me most.
   or study playlists.
 - **Add conflict detection** — preferences like "happy + dark valence" or "metal +
   high acousticness" should trigger a warning before scoring, not silent degradation.
-- **Expand the catalog** — 18 songs means niche genres (blues, classical, folk) each
-  have one song, leaving users with unusual tastes underserved regardless of how well
-  the algorithm works.
+- **Expand the catalog** — three scripts support catalog growth, in recommended order:
+  (1) `import_kaggle.py` imports from the 114k-song Kaggle dataset with measured audio
+  features (`python scripts/import_kaggle.py --all`);
+  (2) `generate_songs.py` uses Gemini to fill gaps in genres thin in the Kaggle dataset;
+  (3) `fetch_spotify.py` uses the Spotify API but requires extended access for new apps.
+  The catalog currently covers 18 genres: the original 15 plus reggae, latin, and world.
