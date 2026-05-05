@@ -17,6 +17,7 @@ class Song:
     valence: float
     danceability: float
     acousticness: float
+    popularity: Optional[int] = None
 
 @dataclass
 class UserProfile:
@@ -56,6 +57,7 @@ def load_songs(csv_path: str) -> List[Dict]:
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
+            raw_pop = row.get("popularity", "").strip()
             songs.append({
                 "id":           int(row["id"]),
                 "title":        row["title"],
@@ -67,6 +69,7 @@ def load_songs(csv_path: str) -> List[Dict]:
                 "valence":      float(row["valence"]),
                 "danceability": float(row["danceability"]),
                 "acousticness": float(row["acousticness"]),
+                "popularity":   int(raw_pop) if raw_pop else None,
             })
     return songs
 
@@ -152,6 +155,15 @@ def score_song(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
         score += acoustic_pts
         reasons.append(f"acousticness proximity ({acoustic_pts:.2f}/0.5)")
 
+    # --- Popularity proximity (max +1.0) ---
+    # Only scores when the user expressed a preference AND the song has data.
+    # Song popularity (0–100) is normalized to 0.0–1.0 before comparison.
+    if "popularity" in user_prefs and song.get("popularity") is not None:
+        song_pop = song["popularity"] / 100.0
+        pop_pts = (1.0 - abs(user_prefs["popularity"] - song_pop)) * 1.0
+        score += pop_pts
+        reasons.append(f"popularity proximity ({pop_pts:.2f}/1.0)")
+
     return score, reasons
 
 
@@ -183,6 +195,8 @@ def compute_max_score(user_prefs: Dict) -> float:
         max_score += 1.5
     if "acousticness" in user_prefs:
         max_score += 0.5
+    if "popularity" in user_prefs:
+        max_score += 1.0
     return max_score
 
 

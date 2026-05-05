@@ -160,7 +160,7 @@ KAGGLE_TO_GENRE: dict[str, str] = {
 
 CSV_FIELDS = [
     "id", "title", "artist", "genre", "mood",
-    "energy", "tempo_bpm", "valence", "danceability", "acousticness",
+    "energy", "tempo_bpm", "valence", "danceability", "acousticness", "popularity",
 ]
 
 
@@ -281,6 +281,7 @@ def main() -> None:
                 tempo        = float(row["tempo"])
                 danceability = float(row["danceability"])
                 acousticness = float(row["acousticness"])
+                popularity   = int(float(row["popularity"]))
             except (ValueError, KeyError):
                 skipped_bad_data += 1
                 continue
@@ -301,6 +302,7 @@ def main() -> None:
                 "valence":      round(valence, 2),
                 "danceability": round(danceability, 2),
                 "acousticness": round(acousticness, 2),
+                "popularity":   popularity,
             })
 
     # ── Sample, deduplicate, assign IDs ──────────────────────────────────────

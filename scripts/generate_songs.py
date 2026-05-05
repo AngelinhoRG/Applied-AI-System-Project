@@ -46,7 +46,7 @@ MOOD_LABELS = [
 
 CSV_FIELDS = [
     "id", "title", "artist", "genre", "mood",
-    "energy", "tempo_bpm", "valence", "danceability", "acousticness",
+    "energy", "tempo_bpm", "valence", "danceability", "acousticness", "popularity",
 ]
 
 SYSTEM_PROMPT = """\
@@ -100,6 +100,7 @@ For each song provide:
 - "valence"     : float 0.0–1.0  (high = happy/bright/positive, low = sad/dark)
 - "danceability": float 0.0–1.0  (how suitable for dancing)
 - "acousticness": float 0.0–1.0  (1.0 = fully acoustic, 0.0 = fully electronic)
+- "popularity"  : integer 0–100  (estimated Spotify popularity; 70+ = mainstream, <40 = niche)
 
 Rules:
 - Every song must be a real, existing recording.
@@ -108,7 +109,7 @@ Rules:
 
 Example of one entry:
 {{"title": "Blinding Lights", "artist": "The Weeknd", "mood": "confident", \
-"energy": 0.80, "tempo_bpm": 171, "valence": 0.33, "danceability": 0.51, "acousticness": 0.00}}"""
+"energy": 0.80, "tempo_bpm": 171, "valence": 0.33, "danceability": 0.51, "acousticness": 0.00, "popularity": 95}}"""
 
     response = client.models.generate_content(
         model="gemini-2.5-flash",
@@ -135,6 +136,7 @@ def validate_row(song: dict, genre: str) -> dict | None:
     if not required.issubset(song.keys()):
         return None
     try:
+        raw_pop = song.get("popularity")
         return {
             "title":        str(song["title"]).strip(),
             "artist":       str(song["artist"]).strip(),
@@ -145,6 +147,7 @@ def validate_row(song: dict, genre: str) -> dict | None:
             "valence":      round(float(song["valence"]), 2),
             "danceability": round(float(song["danceability"]), 2),
             "acousticness": round(float(song["acousticness"]), 2),
+            "popularity":   int(raw_pop) if raw_pop is not None else "",
         }
     except (ValueError, TypeError):
         return None

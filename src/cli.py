@@ -10,7 +10,7 @@ from typing import Optional
 VALID_GENRES = {
     "lofi", "ambient", "jazz", "pop", "indie pop", "rock",
     "metal", "synthwave", "edm", "r&b", "hip-hop", "blues",
-    "country", "folk", "classical",
+    "country", "folk", "classical", "reggae", "latin", "world",
 }
 
 VALID_MOODS = {
@@ -79,12 +79,17 @@ def collect_user_profile() -> dict:
     print("\n  Optional preferences (press Enter to skip):")
     valence = _prompt_optional_float("Valence (brightness of sound)", 0.0, 1.0)
     acousticness = _prompt_optional_float("Acousticness", 0.0, 1.0)
+    popularity = _prompt_optional_float(
+        "Popularity (0.0 = underground/niche, 1.0 = mainstream)", 0.0, 1.0
+    )
 
     prefs: dict = {"genre": genre, "mood": mood, "energy": energy}
     if valence is not None:
         prefs["valence"] = valence
     if acousticness is not None:
         prefs["acousticness"] = acousticness
+    if popularity is not None:
+        prefs["popularity"] = popularity
 
     _print_profile_summary(prefs)
     return prefs
