@@ -28,18 +28,41 @@ reasoning is more trustworthy and more useful than confident-sounding output.
 
 ```mermaid
 flowchart TD
-    A["👤 User Profile
-    genre · mood · energy
-    valence · acousticness"]
-    B[("🗄️ songs.csv
-    expandable catalog")]
+    subgraph Input["User Input — main.py menu"]
+        M["🖥️ Menu
+        1 · Custom profile
+        2 · Pre-made profiles
+        3 · Both"]
+        CLI["cli.py · collect_user_profile()
+        genre · mood · energy
+        valence · acousticness"]
+        PREFS["Pre-made Profiles
+        3 normal · 3 adversarial"]
+        M -->|option 1 or 3| CLI
+        M -->|option 2 or 3| PREFS
+    end
+
+    B[("🗄️ data/songs.csv
+    ~90k songs · 18 genres")]
+
+    subgraph Catalog["Catalog Expansion — scripts/"]
+        KAG["import_kaggle.py
+        Kaggle 114k-track dataset"]
+        GEN["generate_songs.py
+        Gemini fills thin genres"]
+        SPO["fetch_spotify.py
+        Spotify API (extended access)"]
+        KAG --> B
+        GEN --> B
+        SPO --> B
+    end
 
     subgraph Retriever["Retriever — recommender.py"]
         C["score_song() × N
         mood · energy · genre
         valence · acousticness"]
         D["Top-K songs
-        with scores + reasons"]
+        scores + confidence %"]
         C --> D
     end
 
@@ -52,21 +75,20 @@ flowchart TD
     end
 
     subgraph Output["Output"]
-        G["Scored list
-        #1 … #K with reasons"]
+        SCORED["Scored list
+        #1 … #K · score · confidence %"]
         H["AI Narrative
         reasons from actual
         energy · valence · tempo values"]
         I["Terminal + recommender.log"]
-        G --> I
+        SCORED --> I
         H --> I
     end
 
     subgraph QA["Testing & Guardrails — human-in-the-loop"]
-        J["pytest
-        test_recommender.py
-        ✅ validates scoring logic"]
-        K["Adversarial Profiles
+        J["pytest · test_recommender.py
+        ✅ 27 tests"]
+        ADV["Adversarial Profiles
         3 edge cases
         ⚠️ stress-tests conflicts"]
         L["API Key Guard
@@ -74,14 +96,15 @@ flowchart TD
         🔒 exits cleanly if missing"]
     end
 
-    A --> C
+    CLI --> C
+    PREFS --> C
     B --> C
     D --> E
-    D --> G
+    D --> SCORED
     F --> H
     J -->|checks| C
-    K -->|challenges| C
-    K -->|challenges| F
+    ADV -->|challenges| C
+    ADV -->|challenges| F
     L -->|gates| F
 ```
 
