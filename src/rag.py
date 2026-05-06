@@ -10,9 +10,11 @@ Generation — Gemini reads that context and writes a narrative that actively
 """
 
 import logging
+import time
 from typing import Dict, List, Tuple
 
 from google import genai
+from google.genai import errors as genai_errors
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +23,9 @@ MODEL = "gemini-2.5-flash"
 
 def _build_context(user_prefs: Dict, top_songs: List[Tuple[Dict, float, str]]) -> str:
     """Serialize user preferences and retrieved songs into a plain-text context block."""
+    from .recommender import compute_max_score
+    max_score = compute_max_score(user_prefs)
+
     pref_lines = ["User preferences:"]
     for key, val in user_prefs.items():
         pref_lines.append(f"  {key}: {val}")
@@ -32,7 +37,7 @@ def _build_context(user_prefs: Dict, top_songs: List[Tuple[Dict, float, str]]) -
             f" | genre={song['genre']}, mood={song['mood']}"
             f", energy={song['energy']}, valence={song['valence']}"
             f", acousticness={song['acousticness']}, tempo={song['tempo_bpm']} BPM"
-            f" | score={score:.2f}/7.5 | matched because: {reasons}"
+            f" | score={score:.2f}/{max_score:.1f} | matched because: {reasons}"
         )
 
     return "\n".join(pref_lines + song_lines)
@@ -80,6 +85,9 @@ def generate_recommendation(
     return output
 
 
+_RETRY_DELAYS = [5, 15, 30]  # seconds between attempts (3 retries after the first try)
+
+
 def run_rag_pipeline(
     user_prefs: Dict,
     top_songs: List[Tuple[Dict, float, str]],
@@ -87,14 +95,27 @@ def run_rag_pipeline(
 ) -> str:
     """
     Full RAG pipeline entry point.
+    Retries on transient 503 overload errors before giving up.
     Returns the AI-generated narrative, or raises on unrecoverable API errors.
     """
     if not top_songs:
         logger.warning("RAG called with empty top_songs — returning empty string")
         return ""
 
-    try:
-        return generate_recommendation(user_prefs, top_songs, client)
-    except Exception as exc:
-        logger.error("Gemini API error: %s", exc)
-        raise
+    last_exc: Exception | None = None
+    for attempt, delay in enumerate([0] + _RETRY_DELAYS, start=1):
+        if delay:
+            logger.info("Gemini 503 — retrying in %ds (attempt %d)...", delay, attempt)
+            print(f"\n  [Gemini busy — retrying in {delay}s (attempt {attempt}/{len(_RETRY_DELAYS) + 1})...]")
+            time.sleep(delay)
+        try:
+            return generate_recommendation(user_prefs, top_songs, client)
+        except genai_errors.ServerError as exc:
+            logger.warning("Gemini ServerError on attempt %d: %s", attempt, exc)
+            last_exc = exc
+        except Exception as exc:
+            logger.error("Gemini API error (non-retryable): %s", exc)
+            raise
+
+    logger.error("Gemini unavailable after %d attempts: %s", len(_RETRY_DELAYS) + 1, last_exc)
+    raise last_exc  # type: ignore[misc]

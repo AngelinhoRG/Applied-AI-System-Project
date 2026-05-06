@@ -30,7 +30,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from .recommender import load_songs, recommend_songs, confidence  # noqa: E402
+from .recommender import load_songs, recommend_songs, confidence, compute_max_score  # noqa: E402
 from .rag import run_rag_pipeline  # noqa: E402
 from .cli import collect_user_profile  # noqa: E402
 
@@ -125,7 +125,8 @@ def print_retrieved(label: str, recommendations, prefs: dict, k: int) -> None:
         conf_pct = confidence(score, prefs) * 100
         print(f"\n  #{rank}  {song['title']}  —  {song['artist']}")
         print(f"       Genre: {song['genre']}  |  Mood: {song['mood']}")
-        print(f"       Score: {score:.2f} / 7.5  |  Confidence: {conf_pct:.1f}%")
+        max_score = compute_max_score(prefs)
+        print(f"       Score: {score:.2f} / {max_score:.1f}  |  Confidence: {conf_pct:.1f}%")
         for reason in explanation.split(", "):
             print(f"       + {reason}")
 
@@ -168,7 +169,7 @@ def _run_profile(label: str, prefs: dict, songs: list, client: genai.Client, k: 
     try:
         narrative = run_rag_pipeline(prefs, top_songs, client)
         print_ai_narrative(narrative)
-    except (ValueError, RuntimeError, OSError) as exc:
+    except Exception as exc:
         logger.error("Skipping AI narrative for '%s' due to API error: %s", label, exc)
         print("\n  [AI narrative unavailable — see recommender.log for details]")
         print("=" * 64)
