@@ -35,7 +35,7 @@ flowchart TD
         3 · Both"]
         CLI["cli.py · collect_user_profile()
         genre · mood · energy
-        valence · acousticness"]
+        valence · acousticness · popularity"]
         PREFS["Pre-made Profiles
         3 normal · 3 adversarial"]
         M -->|option 1 or 3| CLI
@@ -43,7 +43,7 @@ flowchart TD
     end
 
     B[("🗄️ data/songs.csv
-    ~90k songs · 18 genres")]
+    ~78k songs · 18 genres")]
 
     subgraph Catalog["Catalog Expansion — scripts/"]
         KAG["import_kaggle.py
@@ -60,7 +60,7 @@ flowchart TD
     subgraph Retriever["Retriever — recommender.py"]
         C["score_song() × N
         mood · energy · genre
-        valence · acousticness"]
+        valence · acousticness · popularity"]
         D["Top-K songs
         scores + confidence %"]
         C --> D
@@ -87,7 +87,7 @@ flowchart TD
 
     subgraph QA["Testing & Guardrails — human-in-the-loop"]
         J["pytest · test_recommender.py
-        ✅ 27 tests"]
+        ✅ 38 tests"]
         ADV["Adversarial Profiles
         3 edge cases
         ⚠️ stress-tests conflicts"]
@@ -111,10 +111,11 @@ flowchart TD
 ### How the architecture works
 
 **Retriever (`src/recommender.py`)** — `score_song()` runs against all songs in the
-catalog for a given user profile. Each feature (mood, energy, genre, valence, acousticness) contributes
-points up to a maximum total of 7.5. Songs are ranked by total score and the top-K are
-returned with a breakdown of which features matched and by how much. This step runs
-entirely locally with no API calls.
+catalog for a given user profile. Each feature (mood, energy, genre, valence, acousticness, popularity)
+contributes points up to a maximum total of 8.5. Popularity is optional — it only scores
+when the user provides a preference, so it doesn't penalize the 7.5-point profiles that
+don't use it. Songs are ranked by total score and the top-K are returned with a breakdown
+of which features matched and by how much. This step runs entirely locally with no API calls.
 
 **RAG Pipeline (`src/rag.py`)** — `_build_context()` packs the top-K songs and their
 full attribute values into a structured text block. That block becomes the user message
@@ -374,7 +375,7 @@ The model's job is reasoning, not recall.
 ### Why a handcrafted scorer instead of embeddings
 
 The scorer was originally designed for an 18-song catalog where semantic similarity
-would have been meaningless. The catalog has since grown to ~90k songs, but the
+would have been meaningless. The catalog has since grown to ~78k songs, but the
 explicit scoring weights remain the right choice here: they are easy to inspect,
 debug, and explain, which matters in a project where transparency is a goal. The
 trade-off is that the scorer can't generalize beyond the features it was programmed
@@ -388,11 +389,18 @@ to consider, and there is no learning from listener history.
 | Energy | 2.0 | Strongly determines listening context |
 | Genre | 1.5 | Important but adjacent genres should count |
 | Valence | 1.5 | Brightness/darkness of sound, often overlooked |
+| Popularity | 1.0 | Optional; lets users tune mainstream vs. niche |
 | Acousticness | 0.5 | Narrower preference, optional |
+
+**Total maximum: 8.5 pts** (all six preferences provided). Profiles that omit popularity
+compete on the 7.5-point scale; the confidence percentage always normalizes to whichever
+preferences were actually given, so scores stay comparable.
 
 Mood and energy are weighted equally and highest because they describe *how you feel*,
 not just *what you like*. Genre is slightly lower because the adjacent-genre maps
 allow partial credit, which would over-reward genre matches if the weight were higher.
+Popularity sits at 1.0 because it is a real-world signal (not a purely subjective taste)
+and its effect should be noticeable but not dominant.
 
 **Known flaw:** no feature can score negative. A completely wrong song scores 0 for
 that feature rather than losing points. This compresses the bottom of every ranking
@@ -409,7 +417,7 @@ on easy profiles isn't ready for real users.
 
 ## Testing Summary
 
-**27 out of 27 automated tests passed.** Confidence scores for normal profiles
+**38 out of 38 automated tests passed.** Confidence scores for normal profiles
 averaged 96% (Chill Lofi: 99.6%, High-Energy Pop: 95.2%, Deep Intense Rock: 88.7%).
 Adversarial profiles averaged 68%, correctly reflecting that conflicting preferences
 produce weaker matches. Structured logging captured every retrieval step, API call,
@@ -419,16 +427,19 @@ and token count, making every run fully traceable.
 
 **1 — Automated unit tests (`pytest`)**
 
-The test suite in `tests/test_recommender.py` covers 27 cases across four areas:
+The test suite in `tests/test_recommender.py` covers 38 cases across six areas:
 
 | Area | Tests | What they verify |
 |---|---|---|
 | Mood scoring | 4 | Exact match = 2.0 pts, adjacent = 1.0, no match = 0, missing pref = 0 |
 | Energy / valence / acousticness | 6 | Proportional proximity; missing pref not counted |
 | Genre scoring | 3 | Exact = 1.5 pts, adjacent = 0.75, no match = 0 |
+| Popularity scoring | 5 | Exact = 1.0 pts, proportional proximity, None song skipped, missing pref skipped |
+| Adjacent genres (reggae/latin/world) | 3 | New genres score neighbors at 0.75 pts |
 | `recommend_songs` | 5 | Returns k results, sorted descending, correct top pick, adversarial safety, k > catalog size |
-| Confidence scoring | 5 | Perfect match = 1.0, normalized to active prefs, partial match in (0,1), empty prefs = 0 |
+| Confidence / max score | 6 | Perfect = 1.0, normalized to active prefs, partial in (0,1), includes popularity ceiling |
 | OOP `Recommender` class | 2 | Ranking order, non-empty explanation |
+| `load_songs` | 2 | Returns dicts with all expected keys; popularity is int or None |
 
 Run the suite yourself — no API key required:
 
@@ -444,9 +455,11 @@ answers: *how well did this song satisfy what you asked for, not what you could
 have asked for?*
 
 ```
-compute_max_score(prefs) → the highest possible score for these preferences
-confidence = score / max_possible_score
+compute_max_score(prefs) → highest possible score for the preferences provided
+confidence = score / max_possible_score   # always 0.0 – 1.0
 ```
+
+Max scores by feature: mood 2.0 + energy 2.0 + genre 1.5 + valence 1.5 + popularity 1.0 + acousticness 0.5 = **8.5** when all six preferences are given.
 
 | Profile | Top song | Raw score | Confidence |
 |---|---|---|---|
@@ -536,11 +549,12 @@ intelligent — is what this project taught me most.
 ├── scripts/                 # Catalog expansion — none of these are required to run the app
 │   ├── import_kaggle.py     # Import from spotify-tracks-dataset.csv (114k songs, measured features)
 │   ├── generate_songs.py    # Generate songs via Gemini for genres thin in the Kaggle dataset
-│   └── fetch_spotify.py     # Spotify API import (requires extended access — see note in file)
+│   ├── fetch_spotify.py     # Spotify API import (requires extended access — see note in file)
+│   └── backfill_popularity.py  # One-time migration: backfills popularity from Kaggle; safe to delete
 ├── tests/
 │   └── test_recommender.py  # 27 unit tests: scoring, ranking, confidence, OOP interface
 ├── data/
-│   ├── songs.csv                   # Active song catalog (~90k songs across 18 genres)
+│   ├── songs.csv                   # Active song catalog (~78k songs across 18 genres, all with popularity)
 │   └── spotify-tracks-dataset.csv  # Kaggle source dataset (114k tracks, not committed to git)
 ├── model_card.md        # Model card: intended use, data, limitations, evaluation
 ├── reflection.md        # Detailed profile comparison analysis

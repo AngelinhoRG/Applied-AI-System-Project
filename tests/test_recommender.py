@@ -1,11 +1,13 @@
 """
 Tests for the music recommender scoring engine.
 
-Covers three layers:
-  1. score_song   — per-feature point calculations
-  2. recommend_songs — ranking, ordering, and k-truncation
-  3. confidence   — normalized confidence relative to preferences provided
+Covers five layers:
+  1. score_song       — per-feature point calculations (mood, energy, genre,
+                        valence, acousticness, popularity)
+  2. recommend_songs  — ranking, ordering, and k-truncation
+  3. confidence       — normalized confidence relative to preferences provided
   4. Recommender class — OOP interface (required by project spec)
+  5. load_songs       — CSV parsing and type coercion
 """
 
 import pytest
@@ -221,6 +223,14 @@ def test_compute_max_score_partial_prefs():
     assert compute_max_score(prefs) == pytest.approx(4.0)
 
 
+def test_compute_max_score_with_popularity():
+    prefs = {
+        "genre": "pop", "mood": "happy", "energy": 0.8,
+        "valence": 0.8, "acousticness": 0.2, "popularity": 0.7,
+    }
+    assert compute_max_score(prefs) == pytest.approx(8.5)
+
+
 # ── Recommender class (OOP interface) ─────────────────────────────────────────
 
 def make_small_recommender() -> Recommender:
@@ -252,3 +262,90 @@ def test_explain_recommendation_returns_non_empty_string():
     explanation = rec.explain_recommendation(user, rec.songs[0])
     assert isinstance(explanation, str)
     assert explanation.strip() != ""
+
+
+# ── score_song: popularity ────────────────────────────────────────────────────
+
+def test_exact_popularity_match_scores_full_points():
+    """User wants mainstream (1.0); song popularity 100 → normalized 1.0 → 1.0 pts."""
+    song = make_song(popularity=100)
+    score, reasons = score_song({"popularity": 1.0}, song)
+    assert score == pytest.approx(1.0)
+    assert any("popularity" in r for r in reasons)
+
+
+def test_popularity_proximity_is_proportional():
+    """User wants 0.5; song popularity=0 → diff=0.5 → (1-0.5)*1.0 = 0.5 pts."""
+    song = make_song(popularity=0)
+    score, _ = score_song({"popularity": 0.5}, song)
+    assert score == pytest.approx((1.0 - abs(0.5 - 0.0)) * 1.0)
+
+
+def test_popularity_missing_song_data_not_scored():
+    """Song without a popularity value must not contribute any points."""
+    song = make_song()  # base dict has no "popularity" key
+    score, reasons = score_song({"popularity": 0.8}, song)
+    assert score == 0.0
+    assert not any("popularity" in r for r in reasons)
+
+
+def test_popularity_missing_pref_not_counted():
+    """User did not provide a popularity preference — no points awarded."""
+    song = make_song(popularity=80)
+    score, _ = score_song({}, song)
+    assert score == 0.0
+
+
+def test_popularity_song_none_not_scored():
+    """Song with popularity=None (CSV had empty cell) must not contribute points."""
+    song = make_song(popularity=None)
+    score, reasons = score_song({"popularity": 0.5}, song)
+    assert score == 0.0
+    assert not any("popularity" in r for r in reasons)
+
+
+# ── Adjacent genres: reggae, latin, world ─────────────────────────────────────
+
+def test_adjacent_genre_reggae_scores_hiphop_neighbor():
+    """hip-hop is adjacent to reggae → 0.75 pts."""
+    song = make_song(genre="hip-hop")
+    score, reasons = score_song({"genre": "reggae"}, song)
+    assert score == pytest.approx(0.75)
+    assert any("adjacent genre" in r for r in reasons)
+
+
+def test_adjacent_genre_latin_scores_pop_neighbor():
+    """pop is adjacent to latin → 0.75 pts."""
+    song = make_song(genre="pop")
+    score, reasons = score_song({"genre": "latin"}, song)
+    assert score == pytest.approx(0.75)
+    assert any("adjacent genre" in r for r in reasons)
+
+
+def test_adjacent_genre_world_scores_ambient_neighbor():
+    """ambient is adjacent to world → 0.75 pts."""
+    song = make_song(genre="ambient")
+    score, reasons = score_song({"genre": "world"}, song)
+    assert score == pytest.approx(0.75)
+    assert any("adjacent genre" in r for r in reasons)
+
+
+# ── load_songs ────────────────────────────────────────────────────────────────
+
+def test_load_songs_returns_nonempty_list_of_dicts():
+    """Catalog CSV must load as a non-empty list with the expected keys."""
+    from src.recommender import load_songs
+    songs = load_songs("data/songs.csv")
+    assert len(songs) > 0
+    required_keys = {"id", "title", "artist", "genre", "mood",
+                     "energy", "tempo_bpm", "valence", "danceability",
+                     "acousticness", "popularity"}
+    assert required_keys.issubset(songs[0].keys())
+
+
+def test_load_songs_popularity_is_int_or_none():
+    """After backfill, every song must have an integer popularity (none should be missing)."""
+    from src.recommender import load_songs
+    songs = load_songs("data/songs.csv")
+    for song in songs[:200]:  # spot-check first 200
+        assert song["popularity"] is None or isinstance(song["popularity"], int)
